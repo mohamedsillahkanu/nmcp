@@ -263,17 +263,71 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         st.header("View Individual Chiefdom Maps")
         selected_chiefdom_view = st.selectbox(
             "Select a chiefdom to view in detail",
-            ["None"] + list(individual_maps.keys())
+            ["None"] + chiefdoms
         )
         
         if selected_chiefdom_view != "None":
-            st.markdown(f"""
-                <a href="{individual_maps[selected_chiefdom_view]}" target="_blank">
-                    Click to open detailed map of {selected_chiefdom_view} in new tab
-                </a>
-                """, 
-                unsafe_allow_html=True
+            # Filter data for selected chiefdom
+            chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == selected_chiefdom_view]
+            bounds = chiefdom_shapefile.total_bounds
+            
+            # Create detailed map for selected chiefdom
+            detailed_fig = go.Figure()
+            
+            # Get facilities for this chiefdom
+            chiefdom_facilities = gpd.sjoin(
+                facilities_gdf,
+                chiefdom_shapefile,
+                how="inner",
+                predicate="within"
             )
+            
+            if len(chiefdom_facilities) > 0:
+                detailed_fig.add_trace(
+                    go.Scattermapbox(
+                        lat=chiefdom_facilities[latitude_col],
+                        lon=chiefdom_facilities[longitude_col],
+                        mode='markers',
+                        marker=dict(
+                            size=point_size * 1.5,  # Larger points for detailed view
+                            color=point_color,
+                        ),
+                        text=chiefdom_facilities[name_col],
+                        hovertemplate=(
+                            f"Facility: %{{text}}<br>"
+                            f"Latitude: %{{lat}}<br>"
+                            f"Longitude: %{{lon}}<br>"
+                            "<extra></extra>"
+                        ),
+                        name=selected_chiefdom_view
+                    )
+                )
+            
+            # Update detailed map layout
+            detailed_fig.update_layout(
+                title={
+                    'text': f"Health Facilities in {selected_chiefdom_view}, {selected_district} District",
+                    'y': 0.95,
+                    'x': 0.5,
+                    'xanchor': 'center',
+                    'yanchor': 'top',
+                    'font': {'size': title_font_size}
+                },
+                height=800,
+                showlegend=False,
+                mapbox=dict(
+                    style="carto-positron",
+                    center=dict(
+                        lat=np.mean([bounds[1], bounds[3]]),
+                        lon=np.mean([bounds[0], bounds[2]])
+                    ),
+                    zoom=10
+                ),
+                margin=dict(t=title_spacing + title_font_size + 10, r=10, l=10, b=10)
+            )
+            
+            # Display detailed map
+            st.plotly_chart(detailed_fig, use_container_width=True)
 
         # Download options
         col9, col10 = st.columns(2)
