@@ -1,3 +1,4 @@
+
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
@@ -75,39 +76,8 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
 
         with col7:
             # Color selection
-            point_colors = {
-                "Red": "#FF4B4B",
-                "Blue": "#47B5FF",
-                "Green": "#2ECC71",
-                "Purple": "#9B59B6",
-                "Orange": "#E67E22",
-                "Pink": "#FF69B4",
-                "Yellow": "#F1C40F",
-                "Teal": "#1ABC9C"
-            }
-            background_colors = {
-                "White": "#FFFFFF",
-                "Light Gray": "#F0F0F0",
-                "Beige": "#F5F5DC",
-                "Light Blue": "#E6F3FF",
-                "Light Green": "#E8F5E9",
-                "Light Yellow": "#FFFFF0",
-                "Light Pink": "#FFE4E1"
-            }
-            
-            point_color = st.selectbox(
-                "Point Color",
-                options=list(point_colors.keys()),
-                index=0
-            )
-            point_color = point_colors[point_color]  # Convert name to hex
-            
-            background_color = st.selectbox(
-                "Background Color",
-                options=list(background_colors.keys()),
-                index=0
-            )
-            background_color = background_colors[background_color]  # Convert name to hex
+            point_color = st.color_picker("Point Color", "#FF4B4B")
+            background_color = st.color_picker("Background Color", "#FFFFFF")
 
         with col8:
             # Additional options
@@ -145,9 +115,6 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             specs=[[{"type": "scattermapbox"} for _ in range(grid_size)] for _ in range(grid_size)]
         )
 
-        # Create individual maps for each chiefdom
-        individual_maps = {}
-        
         # Plot each chiefdom
         for idx, chiefdom in enumerate(chiefdoms[:grid_size*grid_size]):
             row = idx // grid_size + 1
@@ -191,64 +158,23 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
                     col=col
                 )
 
-            # Create individual map for this chiefdom
-            individual_fig = go.Figure()
-            
-            if len(chiefdom_facilities) > 0:
-                individual_fig.add_trace(
-                    go.Scattermapbox(
-                        lat=chiefdom_facilities[latitude_col],
-                        lon=chiefdom_facilities[longitude_col],
-                        mode='markers',
-                        marker=dict(
-                            size=point_size * 1.5,  # Slightly larger points for individual view
-                            color=point_color,
-                        ),
-                        text=chiefdom_facilities[name_col],
-                        hovertemplate=(
-                            f"Facility: %{{text}}<br>"
-                            f"Latitude: %{{lat}}<br>"
-                            f"Longitude: %{{lon}}<br>"
-                            "<extra></extra>"
-                        ),
-                        name=chiefdom
-                    )
-                )
-            
-            # Update individual map layout
-            individual_fig.update_layout(
-                title={
-                    'text': f"Health Facilities in {chiefdom}, {selected_district} District",
-                    'y': 0.95,
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'yanchor': 'top',
-                    'font': {'size': title_font_size}
-                },
-                height=800,
-                width=1200,
-                showlegend=False,
-                mapbox=dict(
-                    style="carto-positron",
-                    center=dict(
-                        lat=np.mean([bounds[1], bounds[3]]),
-                        lon=np.mean([bounds[0], bounds[2]])
-                    ),
-                    zoom=9
-                ),
-                margin=dict(t=title_spacing + title_font_size + 10, r=10, l=10, b=10)
-            )
-            
-            # Save individual map
-            individual_html = f"health_facility_map_{selected_district}_{chiefdom}.html"
-            individual_fig.write_html(individual_html)
-            individual_maps[chiefdom] = individual_html
+            # Update layout for each subplot
+            fig.update_layout({
+                f'mapbox{idx+1}': {
+                    'style': "carto-positron",
+                    'center': {
+                        'lat': np.mean([bounds[1], bounds[3]]),
+                        'lon': np.mean([bounds[0], bounds[2]])
+                    },
+                    'zoom': 8
+                }
+            })
 
         # Update overall layout with single margin definition
         fig.update_layout(
             height=1000,
             title={
-                'text': f"{map_title}<br>{selected_district} District",
+                'text': f"{map_title} {selected_district} District",
                 'y': 0.95,
                 'x': 0.5,
                 'xanchor': 'center',
@@ -259,82 +185,8 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             margin=dict(t=title_spacing + title_font_size + 10, r=10, l=10, b=10)
         )
 
-        # Add chiefdom selection for individual map viewing
-        st.header("View Individual Chiefdom Maps")
-        selected_chiefdom_view = st.selectbox(
-            "Select a chiefdom to view in detail",
-            ["None"] + chiefdoms
-        )
-        
-        if selected_chiefdom_view != "None":
-            # Filter data for selected chiefdom
-            chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == selected_chiefdom_view]
-            bounds = chiefdom_shapefile.total_bounds
-            
-            # Create detailed map for selected chiefdom
-            detailed_fig = go.Figure()
-            
-            # Get facilities for this chiefdom
-            chiefdom_facilities = gpd.sjoin(
-                facilities_gdf,
-                chiefdom_shapefile,
-                how="inner",
-                predicate="within"
-            )
-            
-            if len(chiefdom_facilities) > 0:
-                st.write(f"Number of facilities found in {selected_chiefdom_view}: {len(chiefdom_facilities)}")
-                st.write("Coordinates being plotted:")
-                st.write(chiefdom_facilities[[longitude_col, latitude_col, name_col]].head())
-                
-                detailed_fig.add_trace(
-                    go.Scattermapbox(
-                        lat=chiefdom_facilities[latitude_col],
-                        lon=chiefdom_facilities[longitude_col],
-                        mode='markers+text',  # Add text mode
-                        marker=dict(
-                            size=point_size * 1.5,
-                            color=point_color,
-                        ),
-                        text=chiefdom_facilities[name_col],
-                        textposition="top center",  # Position the text above the marker
-                        hovertemplate=(
-                            f"Facility: %{{text}}<br>"
-                            f"Latitude: %{{lat}}<br>"
-                            f"Longitude: %{{lon}}<br>"
-                            "<extra></extra>"
-                        ),
-                        name=selected_chiefdom_view
-                    )
-                )
-            else:
-                st.warning(f"No facilities found in {selected_chiefdom_view} chiefdom")
-            
-            # Update detailed map layout
-            detailed_fig.update_layout(
-                title={
-                    'text': f"Health Facilities in {selected_chiefdom_view}, {selected_district} District",
-                    'y': 0.95,
-                    'x': 0.5,
-                    'xanchor': 'center',
-                    'yanchor': 'top',
-                    'font': {'size': title_font_size}
-                },
-                height=800,
-                showlegend=False,
-                mapbox=dict(
-                    style="carto-positron",
-                    center=dict(
-                        lat=np.mean([bounds[1], bounds[3]]),
-                        lon=np.mean([bounds[0], bounds[2]])
-                    ),
-                    zoom=10
-                ),
-                margin=dict(t=title_spacing + title_font_size + 10, r=10, l=10, b=10)
-            )
-            
-            # Display detailed map
-            st.plotly_chart(detailed_fig, use_container_width=True)
+        # Display the map
+        st.plotly_chart(fig, use_container_width=True)
 
         # Download options
         col9, col10 = st.columns(2)
