@@ -85,7 +85,7 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         
         # Create figure with subplots
         fig = plt.figure(figsize=(20, 25))  # Increased height to accommodate 5 rows
-        fig.suptitle(map_title', fontsize=24, y=0.98)  # Increased y value for more space
+        fig.suptitle(map_title, fontsize=24, y=0.98)  # Increased y value for more space
 
         # Plot each chiefdom
         for idx, chiefdom in enumerate(chiefdoms[:20]):  # Limit to 20 chiefdoms (5x4 grid)
