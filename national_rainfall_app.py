@@ -173,7 +173,7 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         fig.update_layout(
             height=1000,
             title={
-                'text': f"{map_title}<br>{selected_district} District",
+                'text': f"{map_title} {selected_district} District",
                 'y': 0.95,
                 'x': 0.5,
                 'xanchor': 'center',
