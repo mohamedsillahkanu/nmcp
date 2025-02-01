@@ -117,8 +117,8 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
 
         # Plot each chiefdom
         for idx, chiefdom in enumerate(chiefdoms[:grid_size*grid_size]):
-            row = idx // grid_size + 1
-            col = idx % grid_size + 1
+            row = 1
+            col = 1
             
             # Filter shapefile for current chiefdom
             chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == chiefdom]
