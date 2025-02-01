@@ -70,7 +70,7 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             # Title customization
             map_title = st.text_input("Map Title", "Health Facility Distribution by Chiefdom")
             title_font_size = st.slider("Title Font Size", 12, 48, 24)
-            title_spacing = st.slider("Title Top Spacing", 0, 100, 50)
+            title_spacing = st.slider("Title Top Spacing", 0, 200, 50, help="Adjust space above the title")
             point_size = st.slider("Point Size", 5, 20, 10)
 
         with col7:
@@ -170,12 +170,13 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         fig.update_layout(
             title={
                 'text': f"{map_title}<br>{selected_district} District",
-                'y': 1 + (title_spacing / 1000),  # Convert spacing to relative position
+                'y': 0.95,  # Fixed position near top
                 'x': 0.5,
                 'xanchor': 'center',
                 'yanchor': 'top',
                 'font': {'size': title_font_size}
             },
+            margin=dict(t=title_spacing + title_font_size + 10),  # Adjust top margin based on font size and spacing
             height=1000,
             showlegend=False,
             mapbox=dict(
