@@ -106,10 +106,11 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         grid_size = min(4, max(2, int(np.ceil(np.sqrt(n_chiefdoms)))))
         
         # Create subplot figure
+        subplot_titles = [f"{chiefdom}" for chiefdom in chiefdoms[:grid_size*grid_size]]
         fig = make_subplots(
             rows=grid_size,
             cols=grid_size,
-            subplot_titles=[f"{chiefdom}" for chiefdom in chiefdoms[:grid_size*grid_size]],
+            subplot_titles=subplot_titles,
             specs=[[{"type": "scattermapbox"} for _ in range(grid_size)] for _ in range(grid_size)]
         )
 
@@ -160,29 +161,27 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             fig.update_layout({
                 f'mapbox{idx+1}': {
                     'style': "carto-positron",
-                    'center': {'lat': np.mean([bounds[1], bounds[3]]),
-                             'lon': np.mean([bounds[0], bounds[2]])},
+                    'center': {
+                        'lat': np.mean([bounds[1], bounds[3]]),
+                        'lon': np.mean([bounds[0], bounds[2]])
+                    },
                     'zoom': 8
                 }
             })
 
-        # Update overall layout
+        # Update overall layout with single margin definition
         fig.update_layout(
+            height=1000,
             title={
                 'text': f"{map_title}<br>{selected_district} District",
-                'y': 0.95,  # Fixed position near top
+                'y': 0.95,
                 'x': 0.5,
                 'xanchor': 'center',
                 'yanchor': 'top',
                 'font': {'size': title_font_size}
             },
-            margin=dict(t=title_spacing + title_font_size + 10),  # Adjust top margin based on font size and spacing
-            height=1000,
             showlegend=False,
-            mapbox=dict(
-                style="carto-positron"
-            ),
-            margin=dict(t=title_spacing + 50)  # Add extra top margin for title
+            margin=dict(t=title_spacing + title_font_size + 10, r=10, l=10, b=10)
         )
 
         # Display the map
