@@ -283,16 +283,21 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             )
             
             if len(chiefdom_facilities) > 0:
+                st.write(f"Number of facilities found in {selected_chiefdom_view}: {len(chiefdom_facilities)}")
+                st.write("Coordinates being plotted:")
+                st.write(chiefdom_facilities[[longitude_col, latitude_col, name_col]].head())
+                
                 detailed_fig.add_trace(
                     go.Scattermapbox(
                         lat=chiefdom_facilities[latitude_col],
                         lon=chiefdom_facilities[longitude_col],
-                        mode='markers',
+                        mode='markers+text',  # Add text mode
                         marker=dict(
-                            size=point_size * 1.5,  # Larger points for detailed view
+                            size=point_size * 1.5,
                             color=point_color,
                         ),
                         text=chiefdom_facilities[name_col],
+                        textposition="top center",  # Position the text above the marker
                         hovertemplate=(
                             f"Facility: %{{text}}<br>"
                             f"Latitude: %{{lat}}<br>"
@@ -302,6 +307,8 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
                         name=selected_chiefdom_view
                     )
                 )
+            else:
+                st.warning(f"No facilities found in {selected_chiefdom_view} chiefdom")
             
             # Update detailed map layout
             detailed_fig.update_layout(
