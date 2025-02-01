@@ -1,28 +1,18 @@
-def create_adm1_plots(shapefile, coordinates_data, map_column, longitude_col, latitude_col,
-                   point_color, point_size, point_alpha, background_color, custom_cmap,
-                   line_color='black', line_width=0.5, missing_value_color='gray',
-                   missing_value_label='Missing', font_size=12):
-    """Create individual plots for each ADM1 region with enhanced features."""
-    
-    from matplotlib.patches import Patch
+import streamlit as st
+import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+from shapely.geometry import Point
+import numpy as np
+
+def create_adm1_plots(shapefile, coordinates_data, longitude_col, latitude_col):
+    """Create individual plots for each ADM1 region."""
     
     # Get unique ADM1 values
     adm1_values = shapefile['FIRST_DNAM'].unique()
     
     # Create a list to store all figure references
     figures = []
-    
-    # Calculate category counts for the entire dataset
-    if map_column in coordinates_data.columns:
-        category_counts = coordinates_data[map_column].value_counts().to_dict()
-        selected_categories = coordinates_data[map_column].dropna().unique()
-    else:
-        category_counts = {}
-        selected_categories = []
-    
-    # Create color mapping for categories
-    color_mapping = {cat: custom_cmap(i/len(selected_categories)) 
-                    for i, cat in enumerate(selected_categories)}
     
     for adm1 in adm1_values:
         try:
@@ -33,59 +23,24 @@ def create_adm1_plots(shapefile, coordinates_data, map_column, longitude_col, la
             shapefile_subset = shapefile[shapefile['FIRST_DNAM'] == adm1]
             coordinates_subset = coordinates_data[coordinates_data['FIRST_DNAM'] == adm1]
             
-            # Plot base shapefile
-            shapefile_subset.boundary.plot(ax=ax, edgecolor=line_color, 
-                                        linewidth=line_width)
-            
-            # Plot choropleth if map_column exists
-            if map_column in coordinates_subset.columns:
-                shapefile_subset.plot(column=map_column, ax=ax, 
-                                    linewidth=line_width,
-                                    edgecolor=line_color,
-                                    cmap=custom_cmap,
-                                    legend=False,
-                                    missing_kwds={'color': missing_value_color,
-                                                'edgecolor': line_color,
-                                                'label': missing_value_label})
+            # Plot base shapefile with black boundaries
+            shapefile_subset.plot(ax=ax, color='white', edgecolor='black', linewidth=0.5)
             
             # Add district labels
             for idx, row in shapefile_subset.iterrows():
                 ax.text(row.geometry.centroid.x, 
                        row.geometry.centroid.y,
                        row['FIRST_CHIE'],
-                       fontsize=font_size-2,
+                       fontsize=10,
                        ha='center',
                        va='center',
-                       color='black',
                        bbox=dict(facecolor='white',
                                alpha=0.7,
                                edgecolor='none',
                                pad=1))
             
-            # Create legend handles with category counts
-            handles = []
-            for cat in selected_categories:
-                # Count categories for this ADM1 only
-                adm1_count = len(coordinates_subset[coordinates_subset[map_column] == cat])
-                label_with_count = f"{cat} ({adm1_count})"
-                handles.append(Patch(color=color_mapping.get(cat, missing_value_color),
-                                   label=label_with_count))
-            
-            # Add missing values to legend
-            missing_count = coordinates_subset[map_column].isna().sum()
-            if missing_count > 0:
-                handles.append(Patch(color=missing_value_color,
-                                   label=f"{missing_value_label} ({missing_count})"))
-            
-            # Add legend
-            if handles:
-                ax.legend(handles=handles,
-                         title=map_column,
-                         bbox_to_anchor=(1.05, 1),
-                         loc='upper left')
-            
             # Customize appearance
-            ax.set_title(f"{adm1}", fontsize=font_size, fontweight='bold', pad=20)
+            ax.set_title(f"{adm1}", fontsize=12, fontweight='bold', pad=20)
             ax.axis('off')
             
             # Add facility count and coordinates range
@@ -114,37 +69,96 @@ def create_adm1_plots(shapefile, coordinates_data, map_column, longitude_col, la
     
     return figures
 
-# In the main Streamlit app, modify the ADM1 plotting section:
-if display_type == "ADM1 Plots":
-    figures = create_adm1_plots(
-        shapefile=shapefile,
-        coordinates_data=coordinates_data,
-        map_column=selected_column,  # Add this to your UI
-        longitude_col=longitude_col,
-        latitude_col=latitude_col,
-        point_color=point_color,
-        point_size=point_size,
-        point_alpha=point_alpha,
-        background_color=background_color,
-        custom_cmap=plt.cm.get_cmap('viridis'),  # Or let user select
-        line_color='black',
-        line_width=0.5,
-        missing_value_color='gray',
-        missing_value_label='Missing',
-        font_size=12
-    )
-    
-    # Display all figures
-    for fig, caption in figures:
-        st.pyplot(fig)
+# Set up Streamlit page
+st.set_page_config(layout="wide", page_title="Health Facility Map Generator")
+st.title("Interactive Health Facility Map Generator")
+
+# File upload columns
+col1, col2 = st.columns(2)
+
+with col1:
+    st.header("Upload Shapefiles")
+    shp_file = st.file_uploader("Upload .shp file", type=["shp"])
+    shx_file = st.file_uploader("Upload .shx file", type=["shx"])
+    dbf_file = st.file_uploader("Upload .dbf file", type=["dbf"])
+
+with col2:
+    st.header("Upload Health Facility Data")
+    facility_file = st.file_uploader("Upload Excel file (.xlsx)", type=["xlsx"])
+
+# Process files if all are uploaded
+if all([shp_file, shx_file, dbf_file, facility_file]):
+    try:
+        # Read files
+        with open("temp.shp", "wb") as f:
+            f.write(shp_file.read())
+        with open("temp.shx", "wb") as f:
+            f.write(shx_file.read())
+        with open("temp.dbf", "wb") as f:
+            f.write(dbf_file.read())
         
-        # Save option for each figure
-        output_filename = f"health_facility_map_{caption.replace(' ', '_')}.png"
-        plt.savefig(output_filename, dpi=300, bbox_inches='tight', pad_inches=0.1)
-        with open(output_filename, "rb") as file:
-            st.download_button(
-                label=f"Download {caption} (PNG)",
-                data=file,
-                file_name=output_filename,
-                mime="image/png"
-            )
+        shapefile = gpd.read_file("temp.shp")
+        coordinates_data = pd.read_excel(facility_file)
+        
+        # Display data preview
+        st.subheader("Data Preview")
+        st.dataframe(coordinates_data.head())
+        
+        # Select coordinates columns
+        longitude_col = st.selectbox(
+            "Select Longitude Column",
+            coordinates_data.columns,
+            index=coordinates_data.columns.get_loc("longitude") if "longitude" in coordinates_data.columns else 0
+        )
+        latitude_col = st.selectbox(
+            "Select Latitude Column",
+            coordinates_data.columns,
+            index=coordinates_data.columns.get_loc("latitude") if "latitude" in coordinates_data.columns else 0
+        )
+
+        # Data processing
+        coordinates_data = coordinates_data.dropna(subset=[longitude_col, latitude_col])
+        coordinates_data = coordinates_data[
+            (coordinates_data[longitude_col].between(-180, 180)) &
+            (coordinates_data[latitude_col].between(-90, 90))
+        ]
+        
+        if len(coordinates_data) == 0:
+            st.error("No valid coordinates found in the data after filtering.")
+            st.stop()
+            
+        # Ensure consistent CRS
+        if shapefile.crs is None:
+            shapefile = shapefile.set_crs(epsg=4326)
+        else:
+            shapefile = shapefile.to_crs(epsg=4326)
+        
+        # Create individual ADM1 plots
+        figures = create_adm1_plots(
+            shapefile=shapefile,
+            coordinates_data=coordinates_data,
+            longitude_col=longitude_col,
+            latitude_col=latitude_col
+        )
+        
+        # Display all figures
+        for fig, caption in figures:
+            st.pyplot(fig)
+            
+            # Save option for each figure
+            output_filename = f"health_facility_map_{caption.replace(' ', '_')}.png"
+            plt.savefig(output_filename, dpi=300, bbox_inches='tight', pad_inches=0.1)
+            with open(output_filename, "rb") as file:
+                st.download_button(
+                    label=f"Download {caption} (PNG)",
+                    data=file,
+                    file_name=output_filename,
+                    mime="image/png"
+                )
+            
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
+        st.write("Please check your input files and try again.")
+
+else:
+    st.info("Please upload all required files to generate the maps.")
