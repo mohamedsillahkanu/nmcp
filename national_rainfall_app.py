@@ -4,7 +4,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from shapely.geometry import Point
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
 
 st.set_page_config(layout="wide", page_title="Health Facility Map Generator")
 
@@ -37,152 +36,100 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         shapefile = gpd.read_file("temp.shp")
 
         # Read facility data
-        coordinates_data = pd.read_excel(facility_file)
+        facility_data = pd.read_excel(facility_file)
 
         # Display data preview
         st.subheader("Data Preview")
-        st.dataframe(coordinates_data.head())
+        st.dataframe(facility_data.head())
 
-        # District and Chiefdom Selection
-        st.header("Area Selection")
-        col3, col4 = st.columns(2)
+        # Get unique districts from shapefile
+        districts = sorted(shapefile['FIRST_DNAM'].unique())
+        selected_district = st.selectbox("Select District", districts)
+
+        # Filter shapefile for selected district
+        district_shapefile = shapefile[shapefile['FIRST_DNAM'] == selected_district]
         
-        with col3:
-            # Select District
-            districts = sorted(coordinates_data['FIRST_DNAM'].unique())
-            selected_district = st.selectbox("Select District", districts)
+        # Get unique chiefdoms for the selected district
+        chiefdoms = sorted(district_shapefile['FIRST_CHIE'].unique())
+        
+        # Calculate grid dimensions for 4x4 layout
+        n_chiefdoms = len(chiefdoms)
+        grid_size = min(4, max(2, int(np.ceil(np.sqrt(n_chiefdoms)))))
+        
+        # Create figure with subplots
+        fig = plt.figure(figsize=(20, 20))
+        fig.suptitle(f'Health Facilities in {selected_district} District', fontsize=24, y=0.95)
+
+        # Plot each chiefdom
+        for idx, chiefdom in enumerate(chiefdoms[:16]):  # Limit to 16 chiefdoms (4x4 grid)
+            if idx >= grid_size * grid_size:
+                break
+                
+            # Create subplot
+            ax = plt.subplot(grid_size, grid_size, idx + 1)
             
-        # Filter data for selected district
-        district_data = coordinates_data[coordinates_data['FIRST_DNAM'] == selected_district]
-        
-        with col4:
-            # Select Chiefdom
-            chiefdoms = sorted(district_data['FIRST_CHIE'].unique())
-            selected_chiefdom = st.selectbox("Select Chiefdom", chiefdoms)
-
-        # Filter data for selected chiefdom
-        filtered_data = district_data[district_data['FIRST_CHIE'] == selected_chiefdom]
-
-        # Map customization options
-        st.header("Map Customization")
-        
-        col5, col6, col7 = st.columns(3)
-        
-        with col5:
-            # Coordinate column selection
-            longitude_col = st.selectbox(
-                "Select Longitude Column",
-                filtered_data.columns,
-                index=filtered_data.columns.get_loc("w_long") if "w_long" in filtered_data.columns else 0
-            )
-            latitude_col = st.selectbox(
-                "Select Latitude Column",
-                filtered_data.columns,
-                index=filtered_data.columns.get_loc("w_lat") if "w_lat" in filtered_data.columns else 0
-            )
-
-        with col6:
-            # Visual customization
-            map_title = st.text_input("Map Title", f"Health Facilities in {selected_chiefdom}, {selected_district}")
-            point_size = st.slider("Point Size", 10, 200, 50)
-            point_alpha = st.slider("Point Transparency", 0.1, 1.0, 0.7)
-            show_labels = st.checkbox("Show Facility Names", value=True)
-
-        with col7:
-            # Color selection
-            background_colors = ["white", "lightgray", "beige", "lightblue"]
-            point_colors = ["#47B5FF", "red", "green", "purple", "orange"]
+            # Filter shapefile for current chiefdom
+            chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == chiefdom]
             
-            background_color = st.selectbox("Background Color", background_colors)
-            point_color = st.selectbox("Point Color", point_colors)
-
-        # Data processing
-        # Remove missing coordinates
-        filtered_data = filtered_data.dropna(subset=[longitude_col, latitude_col])
-        
-        # Filter invalid coordinates
-        filtered_data = filtered_data[
-            (filtered_data[longitude_col].between(-180, 180)) &
-            (filtered_data[latitude_col].between(-90, 90))
-        ]
-
-        if len(filtered_data) == 0:
-            st.error("No valid coordinates found in the data after filtering.")
-            st.stop()
-
-        # Convert to GeoDataFrame
-        geometry = [Point(xy) for xy in zip(filtered_data[longitude_col], filtered_data[latitude_col])]
-        coordinates_gdf = gpd.GeoDataFrame(filtered_data, geometry=geometry, crs="EPSG:4326")
-
-        # Ensure consistent CRS
-        if shapefile.crs is None:
-            shapefile = shapefile.set_crs(epsg=4326)
-        else:
-            shapefile = shapefile.to_crs(epsg=4326)
-
-        # Create the map with fixed aspect
-        fig, ax = plt.subplots(figsize=(15, 10))
-
-        # Plot shapefile with custom style
-        shapefile.plot(ax=ax, color=background_color, edgecolor='black', linewidth=0.5)
-
-        # Calculate and set appropriate aspect ratio
-        bounds = shapefile.total_bounds
-        mid_y = np.mean([bounds[1], bounds[3]])
-        aspect = 1.0
-        
-        if -90 < mid_y < 90:
-            try:
-                aspect = 1 / np.cos(np.radians(mid_y))
-                if not np.isfinite(aspect) or aspect <= 0:
-                    aspect = 1.0
-            except:
-                aspect = 1.0
-        
-        ax.set_aspect(aspect)
-
-        # Plot points with custom style
-        coordinates_gdf.plot(
-            ax=ax,
-            color=point_color,
-            markersize=point_size,
-            alpha=point_alpha
-        )
-
-        # Add facility name labels if enabled
-        if show_labels:
-            for idx, row in coordinates_gdf.iterrows():
-                ax.annotate(
-                    row['FIRST_CHIE'],
-                    xy=(row.geometry.x, row.geometry.y),
-                    xytext=(5, 5),
-                    textcoords='offset points',
-                    fontsize=8,
-                    bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
+            # Plot chiefdom boundary
+            chiefdom_shapefile.plot(ax=ax, color='lightgray', edgecolor='black', linewidth=0.5)
+            
+            # Filter facility data for current chiefdom
+            chiefdom_facilities = facility_data[
+                (facility_data['w_long'].notna()) & 
+                (facility_data['w_lat'].notna())
+            ]
+            
+            if len(chiefdom_facilities) > 0:
+                # Create GeoDataFrame for facilities
+                geometry = [Point(xy) for xy in zip(chiefdom_facilities['w_long'], 
+                                                  chiefdom_facilities['w_lat'])]
+                facilities_gdf = gpd.GeoDataFrame(
+                    chiefdom_facilities, 
+                    geometry=geometry,
+                    crs="EPSG:4326"
                 )
+                
+                # Plot facilities
+                facilities_gdf.plot(
+                    ax=ax,
+                    color='red',
+                    markersize=50,
+                    alpha=0.7
+                )
+            
+            # Set title and remove axes
+            ax.set_title(f'{chiefdom}\n({len(chiefdom_facilities)} facilities)', 
+                        fontsize=12, pad=10)
+            ax.axis('off')
+            
+            # Calculate and set aspect ratio
+            bounds = chiefdom_shapefile.total_bounds
+            mid_y = np.mean([bounds[1], bounds[3]])
+            aspect = 1.0
+            if -90 < mid_y < 90:
+                try:
+                    aspect = 1 / np.cos(np.radians(mid_y))
+                    if not np.isfinite(aspect) or aspect <= 0:
+                        aspect = 1.0
+                except:
+                    aspect = 1.0
+            ax.set_aspect(aspect)
+            
+            # Zoom to chiefdom bounds
+            ax.set_xlim(bounds[0], bounds[2])
+            ax.set_ylim(bounds[1], bounds[3])
 
-        # Customize map appearance
-        plt.title(map_title, fontsize=20, pad=20)
-        plt.axis('off')
-
-        # Add statistics
-        stats_text = (
-            f"District: {selected_district}\n"
-            f"Chiefdom: {selected_chiefdom}\n"
-            f"Total Facilities: {len(filtered_data)}\n"
-            f"Coordinates Range:\n"
-            f"Longitude: {filtered_data[longitude_col].min():.2f}° to {filtered_data[longitude_col].max():.2f}°\n"
-            f"Latitude: {filtered_data[latitude_col].min():.2f}° to {filtered_data[latitude_col].max():.2f}°"
-        )
-        plt.figtext(0.02, 0.02, stats_text, fontsize=8, bbox=dict(facecolor='white', alpha=0.8))
-
+        # Adjust layout
+        plt.tight_layout()
+        
         # Display the map
         st.pyplot(fig)
 
         # Download options
-        col8, col9 = st.columns(2)
+        col3, col4 = st.columns(2)
         
-        with col8:
+        with col3:
             # Save high-resolution PNG
             output_path_png = "health_facility_map.png"
             plt.savefig(output_path_png, dpi=300, bbox_inches='tight', pad_inches=0.1)
@@ -190,17 +137,17 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
                 st.download_button(
                     label="Download Map (PNG)",
                     data=file,
-                    file_name=f"health_facility_map_{selected_district}_{selected_chiefdom}.png",
+                    file_name=f"health_facility_map_{selected_district}.png",
                     mime="image/png"
                 )
 
-        with col9:
+        with col4:
             # Export coordinates as CSV
-            csv = filtered_data.to_csv(index=False)
+            csv = facility_data.to_csv(index=False)
             st.download_button(
                 label="Download Processed Data (CSV)",
                 data=csv,
-                file_name=f"health_facilities_{selected_district}_{selected_chiefdom}.csv",
+                file_name=f"health_facilities_{selected_district}.csv",
                 mime="text/csv"
             )
 
@@ -214,11 +161,13 @@ else:
     # Show example data format
     st.subheader("Expected Data Format")
     st.write("""
-    Your Excel file should contain the following columns:
+    Shapefile should contain:
     - FIRST_DNAM (District Name)
     - FIRST_CHIE (Chiefdom Name)
-    - Longitude column (e.g., 'w_long')
-    - Latitude column (e.g., 'w_lat')
+    
+    Excel file should contain:
+    - w_long (Longitude)
+    - w_lat (Latitude)
     
     The coordinates should be in decimal degrees format.
     """)
