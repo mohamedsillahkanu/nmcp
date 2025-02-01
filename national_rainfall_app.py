@@ -79,21 +79,21 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         # Get unique chiefdoms for the selected district
         chiefdoms = sorted(district_shapefile['FIRST_CHIE'].unique())
         
-        # Calculate grid dimensions for 4x4 layout
-        n_chiefdoms = len(chiefdoms)
-        grid_size = min(4, max(2, int(np.ceil(np.sqrt(n_chiefdoms)))))
+        # Set the grid size to 5 rows and 4 columns
+        n_rows = 5
+        n_cols = 4
         
         # Create figure with subplots
-        fig = plt.figure(figsize=(20, 20))
-        fig.suptitle(map_title + f'\n{selected_district} District', fontsize=24, y=0.95)
+        fig = plt.figure(figsize=(20, 25))  # Increased height to accommodate 5 rows
+        fig.suptitle(map_title + f'\n{selected_district} District', fontsize=24, y=0.98)  # Increased y value for more space
 
         # Plot each chiefdom
-        for idx, chiefdom in enumerate(chiefdoms[:16]):  # Limit to 16 chiefdoms (4x4 grid)
-            if idx >= grid_size * grid_size:
+        for idx, chiefdom in enumerate(chiefdoms[:20]):  # Limit to 20 chiefdoms (5x4 grid)
+            if idx >= n_rows * n_cols:
                 break
                 
             # Create subplot
-            ax = plt.subplot(grid_size, grid_size, idx + 1)
+            ax = plt.subplot(n_rows, n_cols, idx + 1)
             
             # Filter shapefile for current chiefdom
             chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == chiefdom]
@@ -145,8 +145,9 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             ax.set_xlim(bounds[0], bounds[2])
             ax.set_ylim(bounds[1], bounds[3])
 
-        # Adjust layout
+        # Adjust layout with more space at the top
         plt.tight_layout()
+        plt.subplots_adjust(top=0.92)  # Adjust this value to control space between title and plots
         
         # Display the map
         st.pyplot(fig)
