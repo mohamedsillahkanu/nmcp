@@ -1,9 +1,10 @@
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
-import matplotlib.pyplot as plt
-from shapely.geometry import Point
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import numpy as np
+from shapely.geometry import Point
 
 st.set_page_config(layout="wide", page_title="Health Facility Map Generator")
 
@@ -23,29 +24,6 @@ with col2:
     st.header("Upload Health Facility Data")
     facility_file = st.file_uploader("Upload Excel file (.xlsx)", type=["xlsx"], key="facility")
 
-# Customization options
-st.header("Map Customization")
-col3, col4, col5 = st.columns(3)
-
-with col3:
-    # Visual customization
-    map_title = st.text_input("Map Title", "Health Facility Distribution by Chiefdom")
-    point_size = st.slider("Point Size", 10, 200, 50)
-    point_alpha = st.slider("Point Transparency", 0.1, 1.0, 0.7)
-
-with col4:
-    # Color selection
-    background_colors = ["white", "lightgray", "beige", "lightblue"]
-    point_colors = ["#47B5FF", "red", "green", "purple", "orange"]
-    
-    background_color = st.selectbox("Background Color", background_colors)
-    point_color = st.selectbox("Point Color", point_colors)
-
-with col5:
-    # Additional options
-    show_facility_count = st.checkbox("Show Facility Count", value=True)
-    show_chiefdom_name = st.checkbox("Show Chiefdom Name", value=True)
-
 # Check if all required files are uploaded
 if all([shp_file, shx_file, dbf_file, facility_file]):
     try:
@@ -61,8 +39,52 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         # Read facility data
         facility_data = pd.read_excel(facility_file)
 
+        # Column selection
+        st.header("Coordinate Column Selection")
+        col3, col4, col5 = st.columns(3)
+        
+        with col3:
+            longitude_col = st.selectbox(
+                "Select Longitude Column",
+                facility_data.columns,
+                index=facility_data.columns.get_loc("w_long") if "w_long" in facility_data.columns else 0
+            )
+        with col4:
+            latitude_col = st.selectbox(
+                "Select Latitude Column",
+                facility_data.columns,
+                index=facility_data.columns.get_loc("w_lat") if "w_lat" in facility_data.columns else 0
+            )
+        with col5:
+            name_col = st.selectbox(
+                "Select Facility Name Column",
+                facility_data.columns,
+                index=0
+            )
+
+        # Customization options
+        st.header("Map Customization")
+        col6, col7, col8 = st.columns(3)
+
+        with col6:
+            # Title customization
+            map_title = st.text_input("Map Title", "Health Facility Distribution by Chiefdom")
+            title_font_size = st.slider("Title Font Size", 12, 48, 24)
+            title_spacing = st.slider("Title Top Spacing", 0, 100, 50)
+            point_size = st.slider("Point Size", 5, 20, 10)
+
+        with col7:
+            # Color selection
+            point_color = st.color_picker("Point Color", "#FF4B4B")
+            background_color = st.color_picker("Background Color", "#FFFFFF")
+
+        with col8:
+            # Additional options
+            show_facility_count = st.checkbox("Show Facility Count", value=True)
+            show_chiefdom_name = st.checkbox("Show Chiefdom Name", value=True)
+
         # Convert facility data to GeoDataFrame
-        geometry = [Point(xy) for xy in zip(facility_data['w_long'], facility_data['w_lat'])]
+        geometry = [Point(xy) for xy in zip(facility_data[longitude_col], facility_data[latitude_col])]
         facilities_gdf = gpd.GeoDataFrame(
             facility_data, 
             geometry=geometry,
@@ -83,23 +105,24 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         n_chiefdoms = len(chiefdoms)
         grid_size = min(4, max(2, int(np.ceil(np.sqrt(n_chiefdoms)))))
         
-        # Create figure with subplots
-        fig = plt.figure(figsize=(20, 20))
-        fig.suptitle(map_title + f'\n{selected_district} District', fontsize=24, y=0.95)
+        # Create subplot figure
+        fig = make_subplots(
+            rows=grid_size,
+            cols=grid_size,
+            subplot_titles=[f"{chiefdom}" for chiefdom in chiefdoms[:grid_size*grid_size]],
+            specs=[[{"type": "scattermapbox"} for _ in range(grid_size)] for _ in range(grid_size)]
+        )
 
         # Plot each chiefdom
-        for idx, chiefdom in enumerate(chiefdoms[:16]):  # Limit to 16 chiefdoms (4x4 grid)
-            if idx >= grid_size * grid_size:
-                break
-                
-            # Create subplot
-            ax = plt.subplot(grid_size, grid_size, idx + 1)
+        for idx, chiefdom in enumerate(chiefdoms[:grid_size*grid_size]):
+            row = idx // grid_size + 1
+            col = idx % grid_size + 1
             
             # Filter shapefile for current chiefdom
             chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == chiefdom]
             
-            # Plot chiefdom boundary
-            chiefdom_shapefile.plot(ax=ax, color=background_color, edgecolor='black', linewidth=0.5)
+            # Get chiefdom boundary coordinates
+            bounds = chiefdom_shapefile.total_bounds
             
             # Spatial join to get facilities within the chiefdom
             chiefdom_facilities = gpd.sjoin(
@@ -109,64 +132,77 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
                 predicate="within"
             )
             
-            # Plot facilities
             if len(chiefdom_facilities) > 0:
-                chiefdom_facilities.plot(
-                    ax=ax,
-                    color=point_color,
-                    markersize=point_size,
-                    alpha=point_alpha
+                # Add scatter mapbox trace for facilities
+                fig.add_trace(
+                    go.Scattermapbox(
+                        lat=chiefdom_facilities[latitude_col],
+                        lon=chiefdom_facilities[longitude_col],
+                        mode='markers',
+                        marker=dict(
+                            size=point_size,
+                            color=point_color,
+                        ),
+                        text=chiefdom_facilities[name_col],
+                        hovertemplate=(
+                            f"Facility: %{{text}}<br>"
+                            f"Latitude: %{{lat}}<br>"
+                            f"Longitude: %{{lon}}<br>"
+                            "<extra></extra>"
+                        ),
+                        name=chiefdom
+                    ),
+                    row=row,
+                    col=col
                 )
-            
-            # Set title
-            title = ""
-            if show_chiefdom_name:
-                title += f"{chiefdom}"
-            if show_facility_count:
-                title += f"\n({len(chiefdom_facilities)} facilities)"
-            
-            ax.set_title(title, fontsize=12, pad=10)
-            ax.axis('off')
-            
-            # Calculate and set aspect ratio
-            bounds = chiefdom_shapefile.total_bounds
-            mid_y = np.mean([bounds[1], bounds[3]])
-            aspect = 1.0
-            if -90 < mid_y < 90:
-                try:
-                    aspect = 1 / np.cos(np.radians(mid_y))
-                    if not np.isfinite(aspect) or aspect <= 0:
-                        aspect = 1.0
-                except:
-                    aspect = 1.0
-            ax.set_aspect(aspect)
-            
-            # Zoom to chiefdom bounds
-            ax.set_xlim(bounds[0], bounds[2])
-            ax.set_ylim(bounds[1], bounds[3])
 
-        # Adjust layout
-        plt.tight_layout()
-        
+            # Update layout for each subplot
+            fig.update_layout({
+                f'mapbox{idx+1}': {
+                    'style': "carto-positron",
+                    'center': {'lat': np.mean([bounds[1], bounds[3]]),
+                             'lon': np.mean([bounds[0], bounds[2]])},
+                    'zoom': 8
+                }
+            })
+
+        # Update overall layout
+        fig.update_layout(
+            title={
+                'text': f"{map_title}<br>{selected_district} District",
+                'y': 1 + (title_spacing / 1000),  # Convert spacing to relative position
+                'x': 0.5,
+                'xanchor': 'center',
+                'yanchor': 'top',
+                'font': {'size': title_font_size}
+            },
+            height=1000,
+            showlegend=False,
+            mapbox=dict(
+                style="carto-positron"
+            ),
+            margin=dict(t=title_spacing + 50)  # Add extra top margin for title
+        )
+
         # Display the map
-        st.pyplot(fig)
+        st.plotly_chart(fig, use_container_width=True)
 
         # Download options
-        col6, col7 = st.columns(2)
+        col9, col10 = st.columns(2)
         
-        with col6:
-            # Save high-resolution PNG
-            output_path_png = "health_facility_map.png"
-            plt.savefig(output_path_png, dpi=300, bbox_inches='tight', pad_inches=0.1)
-            with open(output_path_png, "rb") as file:
+        with col9:
+            # Save as HTML
+            html_file = f"health_facility_map_{selected_district}.html"
+            fig.write_html(html_file)
+            with open(html_file, "rb") as file:
                 st.download_button(
-                    label="Download Map (PNG)",
+                    label="Download Interactive Map (HTML)",
                     data=file,
-                    file_name=f"health_facility_map_{selected_district}.png",
-                    mime="image/png"
+                    file_name=html_file,
+                    mime="text/html"
                 )
 
-        with col7:
+        with col10:
             # Export facility data
             if len(chiefdom_facilities) > 0:
                 csv = chiefdom_facilities.to_csv(index=False)
@@ -192,8 +228,9 @@ else:
     - FIRST_CHIE (Chiefdom Name)
     
     Excel file should contain:
-    - w_long (Longitude)
-    - w_lat (Latitude)
+    - Longitude column
+    - Latitude column
+    - Facility name column
     
     The coordinates should be in decimal degrees format.
     """)
