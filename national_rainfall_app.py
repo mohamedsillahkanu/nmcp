@@ -23,6 +23,29 @@ with col2:
     st.header("Upload Health Facility Data")
     facility_file = st.file_uploader("Upload Excel file (.xlsx)", type=["xlsx"], key="facility")
 
+# Customization options
+st.header("Map Customization")
+col3, col4, col5 = st.columns(3)
+
+with col3:
+    # Visual customization
+    map_title = st.text_input("Map Title", "Health Facility Distribution by Chiefdom")
+    point_size = st.slider("Point Size", 10, 200, 50)
+    point_alpha = st.slider("Point Transparency", 0.1, 1.0, 0.7)
+
+with col4:
+    # Color selection
+    background_colors = ["white", "lightgray", "beige", "lightblue"]
+    point_colors = ["#47B5FF", "red", "green", "purple", "orange"]
+    
+    background_color = st.selectbox("Background Color", background_colors)
+    point_color = st.selectbox("Point Color", point_colors)
+
+with col5:
+    # Additional options
+    show_facility_count = st.checkbox("Show Facility Count", value=True)
+    show_chiefdom_name = st.checkbox("Show Chiefdom Name", value=True)
+
 # Check if all required files are uploaded
 if all([shp_file, shx_file, dbf_file, facility_file]):
     try:
@@ -38,9 +61,13 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         # Read facility data
         facility_data = pd.read_excel(facility_file)
 
-        # Display data preview
-        st.subheader("Data Preview")
-        st.dataframe(facility_data.head())
+        # Convert facility data to GeoDataFrame
+        geometry = [Point(xy) for xy in zip(facility_data['w_long'], facility_data['w_lat'])]
+        facilities_gdf = gpd.GeoDataFrame(
+            facility_data, 
+            geometry=geometry,
+            crs="EPSG:4326"
+        )
 
         # Get unique districts from shapefile
         districts = sorted(shapefile['FIRST_DNAM'].unique())
@@ -58,7 +85,7 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         
         # Create figure with subplots
         fig = plt.figure(figsize=(20, 20))
-        fig.suptitle(f'Health Facilities in {selected_district} District', fontsize=24, y=0.95)
+        fig.suptitle(map_title + f'\n{selected_district} District', fontsize=24, y=0.95)
 
         # Plot each chiefdom
         for idx, chiefdom in enumerate(chiefdoms[:16]):  # Limit to 16 chiefdoms (4x4 grid)
@@ -72,35 +99,33 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
             chiefdom_shapefile = district_shapefile[district_shapefile['FIRST_CHIE'] == chiefdom]
             
             # Plot chiefdom boundary
-            chiefdom_shapefile.plot(ax=ax, color='lightgray', edgecolor='black', linewidth=0.5)
+            chiefdom_shapefile.plot(ax=ax, color=background_color, edgecolor='black', linewidth=0.5)
             
-            # Filter facility data for current chiefdom
-            chiefdom_facilities = facility_data[
-                (facility_data['w_long'].notna()) & 
-                (facility_data['w_lat'].notna())
-            ]
+            # Spatial join to get facilities within the chiefdom
+            chiefdom_facilities = gpd.sjoin(
+                facilities_gdf,
+                chiefdom_shapefile,
+                how="inner",
+                predicate="within"
+            )
             
+            # Plot facilities
             if len(chiefdom_facilities) > 0:
-                # Create GeoDataFrame for facilities
-                geometry = [Point(xy) for xy in zip(chiefdom_facilities['w_long'], 
-                                                  chiefdom_facilities['w_lat'])]
-                facilities_gdf = gpd.GeoDataFrame(
-                    chiefdom_facilities, 
-                    geometry=geometry,
-                    crs="EPSG:4326"
-                )
-                
-                # Plot facilities
-                facilities_gdf.plot(
+                chiefdom_facilities.plot(
                     ax=ax,
-                    color='red',
-                    markersize=50,
-                    alpha=0.7
+                    color=point_color,
+                    markersize=point_size,
+                    alpha=point_alpha
                 )
             
-            # Set title and remove axes
-            ax.set_title(f'{chiefdom}\n({len(chiefdom_facilities)} facilities)', 
-                        fontsize=12, pad=10)
+            # Set title
+            title = ""
+            if show_chiefdom_name:
+                title += f"{chiefdom}"
+            if show_facility_count:
+                title += f"\n({len(chiefdom_facilities)} facilities)"
+            
+            ax.set_title(title, fontsize=12, pad=10)
             ax.axis('off')
             
             # Calculate and set aspect ratio
@@ -127,9 +152,9 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
         st.pyplot(fig)
 
         # Download options
-        col3, col4 = st.columns(2)
+        col6, col7 = st.columns(2)
         
-        with col3:
+        with col6:
             # Save high-resolution PNG
             output_path_png = "health_facility_map.png"
             plt.savefig(output_path_png, dpi=300, bbox_inches='tight', pad_inches=0.1)
@@ -141,15 +166,16 @@ if all([shp_file, shx_file, dbf_file, facility_file]):
                     mime="image/png"
                 )
 
-        with col4:
-            # Export coordinates as CSV
-            csv = facility_data.to_csv(index=False)
-            st.download_button(
-                label="Download Processed Data (CSV)",
-                data=csv,
-                file_name=f"health_facilities_{selected_district}.csv",
-                mime="text/csv"
-            )
+        with col7:
+            # Export facility data
+            if len(chiefdom_facilities) > 0:
+                csv = chiefdom_facilities.to_csv(index=False)
+                st.download_button(
+                    label="Download Processed Data (CSV)",
+                    data=csv,
+                    file_name=f"health_facilities_{selected_district}.csv",
+                    mime="text/csv"
+                )
 
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
