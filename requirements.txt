@@ -20,3 +20,17 @@ streamlit_option_menu
 scipy
 statsmodels>=0.13.0
 factor_analyzer
+lifelines
+pymc
+arviz
+pmdarima
+pingouin
+PyGithub
+xlrd
+fuzzywuzzy
+rapidfuzz
+stringdist
+python-Levenshtein==0.21.0
+jellyfish
+xlrd
+Shapely
