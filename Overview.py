@@ -1,12 +1,31 @@
 import streamlit as st
+import requests
+from PIL import Image
+from io import BytesIO
 
 # Title of the app
 st.title("Automated Geospatial Analysis for Sub-National Tailoring of Malaria Interventions")
 
-# Display the image using the GitHub raw URL
-st.image("https://github.com/mohamedsillahkanu/si/raw/b0706926bf09ba23d8e90c394fdbb17e864121d8/Sierra%20Leone%20Map.png", 
-         caption="Sierra Leone Administrative Map",
-         use_container_width=True)
+# Function to load and display image with error handling
+def load_and_display_image(image_url):
+    try:
+        response = requests.get(image_url)
+        if response.status_code == 200:
+            image = Image.open(BytesIO(response.content))
+            st.image(
+                image,
+                caption="Sierra Leone Administrative Map",
+                use_container_width=True
+            )
+        else:
+            st.error(f"Failed to load image. Status code: {response.status_code}")
+    except Exception as e:
+        st.error(f"Error loading image: {str(e)}")
+        st.info("Please ensure the image URL is accessible and valid.")
+
+# Display the image using the GitHub raw URL with error handling
+image_url = "https://github.com/mohamedsillahkanu/si/raw/b0706926bf09ba23d8e90c394fdbb17e864121d8/Sierra%20Leone%20Map.png"
+load_and_display_image(image_url)
 
 # Overview Section
 st.header("Overview")
