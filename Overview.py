@@ -15,7 +15,7 @@ def load_and_display_image(image_url):
             st.image(
                 image,
                 caption="Sierra Leone Administrative Map",
-                use_container_width=True
+                use_column_width=True
             )
         else:
             st.error(f"Failed to load image. Status code: {response.status_code}")
